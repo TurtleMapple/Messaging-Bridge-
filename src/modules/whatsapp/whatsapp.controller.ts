@@ -1,37 +1,83 @@
-import { Hono } from 'hono'
-import { zValidator } from '@hono/zod-validator'
-import { sendWhatsAppSchema } from './whatsapp.schema'
-import { sendWhatsAppMessage, getWhatsAppStatus } from './whatsapp.service'
-import { successResponse } from '../../common/utils/response'
-import { ValidationError } from '../../common/utils/errors'
+import { Hono } from 'hono';
+import { zValidator } from '@hono/zod-validator';
+import { SendWhatsAppSchema } from './whatsapp.schema';
+import { sendWhatsAppMessage, getWhatsAppStatus } from './whatsapp.service';
+import { whatsAppConnection } from './whatsapp.connection';
+import { successResponse, failResponse } from '../../common/utils/response';
+import { ValidationError } from '../../common/utils/errors';
 
-const whatsappRouter = new Hono()
+const whatsappRouter = new Hono();
 
-// GET /whatsapp/status — check connection & get QR code if not connected
+/**
+ * GET /whatsapp/status
+ * Memeriksa status koneksi WhatsApp dan mengambil metadata sesi atau QR code.
+ */
 whatsappRouter.get('/status', (c) => {
-  const status = getWhatsAppStatus()
-  return c.json(
-    successResponse(status, status.connected ? 'WhatsApp connected' : 'Waiting for QR scan'),
-  )
-})
+  const status = getWhatsAppStatus();
+  
+  let message = 'Status WhatsApp diambil';
+  switch (status.state) {
+    case 'READY':
+      message = 'WhatsApp terhubung dan siap digunakan';
+      break;
+    case 'AUTHENTICATING':
+      message = 'Menunggu pemindaian QR Code';
+      break;
+    case 'INITIALIZING':
+      message = 'Sedang menginisialisasi sesi WhatsApp';
+      break;
+    case 'DISCONNECTED':
+      message = 'WhatsApp terputus. Silakan lakukan pemicuan ulang (reconnect)';
+      break;
+  }
 
-// POST /whatsapp/send — send a WhatsApp message
+  console.log(`[WhatsApp] Status Check: ${status.state}`);
+  return c.json(successResponse(status, message));
+});
+
+/**
+ * POST /whatsapp/send
+ * Mengirim pesan teks WhatsApp ke nomor tujuan.
+ */
 whatsappRouter.post(
   '/send',
-  zValidator('json', sendWhatsAppSchema, (result) => {
+  zValidator('json', SendWhatsAppSchema, (result) => {
     if (!result.success) {
+      console.warn('[WhatsApp] Validation failed for /send');
       const data = result.error.issues.map((i) => ({
         field: i.path.join('.'),
         message: i.message,
-      }))
-      throw new ValidationError('Validation failed', data)
+      }));
+      throw new ValidationError('Validasi input gagal', data);
     }
   }),
   async (c) => {
-    const dto = c.req.valid('json')
-    const result = await sendWhatsAppMessage(dto)
-    return c.json(successResponse(result, 'Message sent via WhatsApp'), 200)
+    const dto = c.req.valid('json');
+    console.log(`[WhatsApp] Sending message to ${dto.recipient}`);
+    
+    const result = await sendWhatsAppMessage(dto);
+    return c.json(successResponse(result, 'Pesan berhasil dikirim ke WhatsApp'), 200);
   }
-)
+);
 
-export { whatsappRouter }
+/**
+ * POST /whatsapp/reconnect
+ * Memicu inisialisasi ulang koneksi WhatsApp jika terputus.
+ */
+whatsappRouter.post('/reconnect', async (c) => {
+  const status = getWhatsAppStatus();
+  
+  if (status.state === 'READY') {
+    return c.json(failResponse('WhatsApp sudah terhubung', 'ALREADY_CONNECTED'), 400);
+  }
+
+  console.log('[WhatsApp] Manual reconnection triggered');
+  // Menjalankan init() secara asinkron tanpa menunggu selesai sepenuhnya untuk response cepat
+  whatsAppConnection.init().catch(err => {
+    console.error('[WhatsApp] Reconnection error:', err);
+  });
+
+  return c.json(successResponse(null, 'Proses inisialisasi ulang telah dimulai'), 200);
+});
+
+export { whatsappRouter };

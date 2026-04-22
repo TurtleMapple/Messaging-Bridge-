@@ -1,81 +1,135 @@
 import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
-  makeInMemoryStore,
   useMultiFileAuthState,
-} from '@whiskeysockets/baileys'
-import type { Boom } from '@hapi/boom'
+  ConnectionState,
+  WASocket,
+} from '@whiskeysockets/baileys';
+import type { Boom } from '@hapi/boom';
+import { WhatsAppStatus, WhatsAppState } from './whatsapp.schema';
 
-const AUTH_FOLDER = './baileys_auth_info'
+const AUTH_FOLDER = './baileys_auth_info';
 
 /**
- * WhatsAppConnection encapsulates the full Baileys socket lifecycle:
- * - auth state persistence
- * - QR code handling
- * - auto-reconnect on disconnect
+ * WhatsAppConnection encapsulates the full Baileys socket lifecycle.
+ * Manages state transitions, session info, and auto-reconnection.
  *
- * Single Responsibility: this class ONLY manages the connection.
- * Message sending is handled separately in whatsapp.service.ts.
+ * @version 2.0.0
  */
 export class WhatsAppConnection {
-  private socket: ReturnType<typeof makeWASocket> | null = null
-  private store = makeInMemoryStore({})
+  private socket: WASocket | null = null;
 
-  public connected = false
-  public qrCode: string | null = null
+  private state: WhatsAppState = 'DISCONNECTED';
+  private sessionInfo: WhatsAppStatus['info'] = {};
+  public qrCode: string | null = null;
 
-  async init(): Promise<void> {
-    const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER)
-    const { version } = await fetchLatestBaileysVersion()
+  /**
+   * Initializes the WhatsApp connection, sets up auth state, and binds events.
+   * @returns {Promise<void>}
+   */
+  public async init(): Promise<void> {
+    this.updateState('INITIALIZING');
+
+    const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
+    const { version } = await fetchLatestBaileysVersion();
 
     const sock = makeWASocket({
       version,
       auth: authState,
       printQRInTerminal: true,
-    })
+    });
 
-    this.store.bind(sock.ev)
-    this.socket = sock
+    this.socket = sock;
 
-    sock.ev.on('creds.update', saveCreds)
+    // Listen for credential updates to persist session
+    sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-      if (qr) {
-        this.qrCode = qr
-        this.connected = false
-        console.log('📱 Scan the QR code in the terminal to connect WhatsApp')
-      }
-
-      if (connection === 'open') {
-        this.connected = true
-        this.qrCode = null
-        console.log('✅ WhatsApp connected!')
-      }
-
-      if (connection === 'close') {
-        this.connected = false
-        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut
-
-        console.log(`⚠️  WhatsApp disconnected. Reconnecting: ${shouldReconnect}`)
-        if (shouldReconnect) {
-          this.init()
-        }
-      }
-    })
+    // Listen for connection lifecycle updates
+    sock.ev.on('connection.update', (update: Partial<ConnectionState>) => {
+      this.handleConnectionUpdate(update);
+    });
   }
 
-  getSocket() {
-    return this.socket
-  }
+  /**
+   * Internal handler for connection state changes and QR generation.
+   * @param {Partial<ConnectionState>} update
+   * @private
+   */
+  private handleConnectionUpdate(update: Partial<ConnectionState>): void {
+    const { connection, lastDisconnect, qr } = update;
 
-  getStatus() {
-    return {
-      connected: this.connected,
-      qr: this.qrCode ?? undefined,
+    if (qr) {
+      this.qrCode = qr;
+      this.updateState('AUTHENTICATING');
+      console.log('📱 Scan the QR code in the terminal to connect WhatsApp');
     }
+
+    if (connection === 'open') {
+      const user = this.socket?.authState.creds.me;
+
+      this.sessionInfo = {
+        pushName: user?.name,
+        wid: user?.id,
+        platform: this.socket?.authState.creds.platform,
+      };
+
+      this.qrCode = null;
+      this.updateState('READY');
+      console.log(
+        `✅ WhatsApp Connected as ${this.sessionInfo.pushName} (${this.sessionInfo.platform})`
+      );
+    }
+
+    if (connection === 'close') {
+      const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+      this.updateState('DISCONNECTED');
+      this.sessionInfo = {};
+
+      console.error(
+        `⚠️ Connection Closed. Reason: ${statusCode}, Reconnecting: ${shouldReconnect}`
+      );
+
+      if (shouldReconnect) {
+        this.init();
+      }
+    }
+  }
+
+  /**
+   * Updates the internal state and logs the transition.
+   * @param {WhatsAppState} newState
+   * @private
+   */
+  private updateState(newState: WhatsAppState): void {
+    this.state = newState;
+  }
+
+  /**
+   * Returns the current Baileys socket instance.
+   * @returns {WASocket | null}
+   */
+  public getSocket(): WASocket | null {
+    return this.socket;
+  }
+
+  /**
+   * Returns the current connection status and session metadata.
+   * Follows the WhatsAppStatusSchema structure.
+   * @returns {WhatsAppStatus}
+   */
+  public getStatus(): WhatsAppStatus {
+    return {
+      state: this.state,
+      qrCode: this.qrCode ?? undefined,
+      info: this.sessionInfo,
+      updatedAt: new Date(),
+    };
   }
 }
 
-// Singleton instance shared across the app lifecycle
-export const whatsAppConnection = new WhatsAppConnection()
+/**
+ * Singleton instance shared across the app lifecycle.
+ */
+export const whatsAppConnection = new WhatsAppConnection();

@@ -1,19 +1,20 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { SendWhatsAppSchema } from './whatsapp.schema';
-import { sendWhatsAppMessage, getWhatsAppStatus } from './whatsapp.service';
+import { WhatsAppService } from './whatsapp.service';
 import { whatsAppConnection } from './whatsapp.connection';
 import { successResponse, failResponse } from '../../common/utils/response';
 import { ValidationError } from '../../common/utils/errors';
 
 const whatsappRouter = new Hono();
+const whatsappService = new WhatsAppService();
 
 /**
  * GET /whatsapp/status
  * Memeriksa status koneksi WhatsApp dan mengambil metadata sesi atau QR code.
  */
 whatsappRouter.get('/status', (c) => {
-  const status = getWhatsAppStatus();
+  const status = whatsappService.getStatus();
   
   let message = 'Status WhatsApp diambil';
   switch (status.state) {
@@ -55,7 +56,7 @@ whatsappRouter.post(
     const dto = c.req.valid('json');
     console.log(`[WhatsApp] Sending message to ${dto.recipient}`);
     
-    const result = await sendWhatsAppMessage(dto);
+    const result = await whatsappService.sendMessage(dto);
     return c.json(successResponse(result, 'Pesan berhasil dikirim ke WhatsApp'), 200);
   }
 );
@@ -65,7 +66,7 @@ whatsappRouter.post(
  * Memicu inisialisasi ulang koneksi WhatsApp jika terputus.
  */
 whatsappRouter.post('/reconnect', async (c) => {
-  const status = getWhatsAppStatus();
+  const status = whatsappService.getStatus();
   
   if (status.state === 'READY') {
     return c.json(failResponse('WhatsApp sudah terhubung', 'ALREADY_CONNECTED'), 400);

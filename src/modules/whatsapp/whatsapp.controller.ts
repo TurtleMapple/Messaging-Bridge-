@@ -1,19 +1,50 @@
-import { Hono } from 'hono';
-import { zValidator } from '@hono/zod-validator';
-import { SendWhatsAppSchema } from './whatsapp.schema';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { SendWhatsAppSchema, WhatsAppStatusSchema } from './whatsapp.schema';
 import { WhatsAppService } from './whatsapp.service';
 import { whatsAppConnection } from './whatsapp.connection';
 import { successResponse, failResponse } from '../../common/utils/response';
 import { ValidationError } from '../../common/utils/errors';
 
-const whatsappRouter = new Hono();
+const whatsappRouter = new OpenAPIHono({
+  defaultHook: (result, c) => {
+    if (!result.success) {
+      console.warn('[WhatsApp] Validation failed');
+      const data = result.error.issues.map((i) => ({
+        field: i.path.join('.'),
+        message: i.message,
+      }));
+      throw new ValidationError('Validasi input gagal', data);
+    }
+  }
+});
 const whatsappService = new WhatsAppService();
 
 /**
  * GET /whatsapp/status
- * Memeriksa status koneksi WhatsApp dan mengambil metadata sesi atau QR code.
  */
-whatsappRouter.get('/status', (c) => {
+const statusRoute = createRoute({
+  method: 'get',
+  path: '/status',
+  tags: ['WhatsApp'],
+  summary: 'Check WhatsApp connection status',
+  description: 'Memeriksa status koneksi WhatsApp dan mengambil metadata sesi atau QR code.',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            status: z.literal('success'),
+            message: z.string(),
+            data: WhatsAppStatusSchema
+          })
+        }
+      },
+      description: 'Status WhatsApp diambil'
+    }
+  }
+});
+
+whatsappRouter.openapi(statusRoute, (c) => {
   const status = whatsappService.getStatus();
   
   let message = 'Status WhatsApp diambil';
@@ -33,43 +64,99 @@ whatsappRouter.get('/status', (c) => {
   }
 
   console.log(`[WhatsApp] Status Check: ${status.state}`);
-  return c.json(successResponse(status, message));
+  return c.json(successResponse(status, message) as any, 200);
 });
 
 /**
  * POST /whatsapp/send
- * Mengirim pesan teks WhatsApp ke nomor tujuan.
  */
-whatsappRouter.post(
-  '/send',
-  zValidator('json', SendWhatsAppSchema, (result) => {
-    if (!result.success) {
-      console.warn('[WhatsApp] Validation failed for /send');
-      const data = result.error.issues.map((i) => ({
-        field: i.path.join('.'),
-        message: i.message,
-      }));
-      throw new ValidationError('Validasi input gagal', data);
+const sendRoute = createRoute({
+  method: 'post',
+  path: '/send',
+  tags: ['WhatsApp'],
+  summary: 'Send WhatsApp message',
+  description: 'Mengirim pesan teks WhatsApp ke nomor tujuan.',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: SendWhatsAppSchema
+        }
+      }
     }
-  }),
-  async (c) => {
-    const dto = c.req.valid('json');
-    console.log(`[WhatsApp] Sending message to ${dto.recipient}`);
-    
-    const result = await whatsappService.sendMessage(dto);
-    return c.json(successResponse(result, 'Pesan berhasil dikirim ke WhatsApp'), 200);
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            status: z.literal('success'),
+            message: z.string(),
+            data: z.object({ id: z.string() })
+          })
+        }
+      },
+      description: 'Pesan berhasil dikirim ke WhatsApp'
+    },
+    400: {
+      description: 'Validasi input gagal'
+    },
+    503: {
+      description: 'WhatsApp is not connected'
+    }
   }
-);
+});
+
+whatsappRouter.openapi(sendRoute, async (c) => {
+  const dto = c.req.valid('json');
+  console.log(`[WhatsApp] Sending message to ${dto.recipient}`);
+  
+  const result = await whatsappService.sendMessage(dto);
+  return c.json(successResponse(result, 'Pesan berhasil dikirim ke WhatsApp') as any, 200);
+});
 
 /**
  * POST /whatsapp/reconnect
- * Memicu inisialisasi ulang koneksi WhatsApp jika terputus.
  */
-whatsappRouter.post('/reconnect', async (c) => {
+const reconnectRoute = createRoute({
+  method: 'post',
+  path: '/reconnect',
+  tags: ['WhatsApp'],
+  summary: 'Trigger WhatsApp reconnect',
+  description: 'Memicu inisialisasi ulang koneksi WhatsApp jika terputus.',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            status: z.literal('success'),
+            message: z.string(),
+            data: z.null()
+          })
+        }
+      },
+      description: 'Proses inisialisasi ulang telah dimulai'
+    },
+    400: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            status: z.literal('fail'),
+            message: z.string(),
+            code: z.string().optional()
+          })
+        }
+      },
+      description: 'WhatsApp sudah terhubung'
+    }
+  }
+});
+
+whatsappRouter.openapi(reconnectRoute, async (c) => {
   const status = whatsappService.getStatus();
   
   if (status.state === 'READY') {
-    return c.json(failResponse('WhatsApp sudah terhubung', 'ALREADY_CONNECTED'), 400);
+    return c.json({ status: 'fail', message: 'WhatsApp sudah terhubung', code: 'ALREADY_CONNECTED' } as const, 400);
   }
 
   console.log('[WhatsApp] Manual reconnection triggered');
@@ -78,7 +165,7 @@ whatsappRouter.post('/reconnect', async (c) => {
     console.error('[WhatsApp] Reconnection error:', err);
   });
 
-  return c.json(successResponse(null, 'Proses inisialisasi ulang telah dimulai'), 200);
+  return c.json({ status: 'success', message: 'Proses inisialisasi ulang telah dimulai', data: null } as const, 200);
 });
 
 export { whatsappRouter };

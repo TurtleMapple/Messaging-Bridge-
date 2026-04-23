@@ -6,6 +6,7 @@ import makeWASocket, {
   WASocket,
 } from '@whiskeysockets/baileys';
 import type { Boom } from '@hapi/boom';
+import qrcode from 'qrcode-terminal';
 import { WhatsAppStatus, WhatsAppState } from './whatsapp.schema';
 
 const AUTH_FOLDER = './baileys_auth_info';
@@ -36,7 +37,7 @@ export class WhatsAppConnection {
     const sock = makeWASocket({
       version,
       auth: authState,
-      printQRInTerminal: true,
+      printQRInTerminal: false,
     });
 
     this.socket = sock;
@@ -61,7 +62,8 @@ export class WhatsAppConnection {
     if (qr) {
       this.qrCode = qr;
       this.updateState('AUTHENTICATING');
-      console.log('📱 Scan the QR code in the terminal to connect WhatsApp');
+      console.log('📱 Scan the QR code in the terminal to connect WhatsApp:');
+      qrcode.generate(qr, { small: true });
     }
 
     if (connection === 'open') {

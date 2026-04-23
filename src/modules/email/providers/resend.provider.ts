@@ -1,4 +1,4 @@
-import { Resend } from 'resend'
+import { Resend, CreateEmailOptions } from 'resend'
 import { IEmailProvider, EmailOptions } from '../interfaces/email-provider.interface'
 
 /**
@@ -12,13 +12,19 @@ export class ResendProvider implements IEmailProvider {
   }
 
   async send(options: EmailOptions): Promise<{ id: string }> {
-    const { data, error } = await this.client.emails.send({
-      from: options.from,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-    })
+    const { from, to, subject, html, text } = options;
+
+    let payload: CreateEmailOptions;
+
+    if (html) {
+      payload = { from, to, subject, html, text };
+    } else if (text) {
+      payload = { from, to, subject, text };
+    } else {
+      throw new Error('Email body (html or text) is required');
+    }
+
+    const { data, error } = await this.client.emails.send(payload)
 
     if (error) {
       throw new Error(error.message)

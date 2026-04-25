@@ -6,7 +6,7 @@ import makeWASocket, {
   WASocket,
 } from '@whiskeysockets/baileys';
 import type { Boom } from '@hapi/boom';
-import qrcode from 'qrcode-terminal';
+import * as qrcode from 'qrcode-terminal';
 import { WhatsAppStatus, WhatsAppState } from './whatsapp.schema';
 
 const AUTH_FOLDER = './baileys_auth_info';

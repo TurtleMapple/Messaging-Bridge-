@@ -57,6 +57,9 @@ importers:
       '@types/nodemailer':
         specifier: ^8.0.0
         version: 8.0.0
+      '@types/qrcode-terminal':
+        specifier: ^0.12.2
+        version: 0.12.2
       vitest:
         specifier: ^4.1.5
         version: 4.1.5(@types/node@20.19.39)(vite@8.0.9(@types/node@20.19.39)(yaml@2.8.3))
@@ -483,6 +486,9 @@ packages:
 
   '@types/nodemailer@8.0.0':
     resolution: {integrity: sha512-fyf8jWULsCo0d0BuoQ75i6IeoHs47qcqxWc7yUdUcV0pOZGjUTTOvwdG1PRXUDqN/8A64yQdQdnA2pZgcdi+cA==}
+
+  '@types/qrcode-terminal@0.12.2':
+    resolution: {integrity: sha512-v+RcIEJ+Uhd6ygSQ0u5YYY7ZM+la7GgPbs0V/7l/kFs2uO4S8BcIUEMoP7za4DNIqNnUD5npf0A/7kBhrCKG5Q==}
 
   '@vitest/expect@4.1.5':
     resolution: {integrity: sha512-PWBaRY5JoKuRnHlUHfpV/KohFylaDZTupcXN1H9vYryNLOnitSw60Mw9IAE2r67NbwwzBw/Cc/8q9BK3kIX8Kw==}
@@ -1490,6 +1496,8 @@ snapshots:
   '@types/nodemailer@8.0.0':
     dependencies:
       '@types/node': 20.19.39
+
+  '@types/qrcode-terminal@0.12.2': {}
 
   '@vitest/expect@4.1.5':
     dependencies:

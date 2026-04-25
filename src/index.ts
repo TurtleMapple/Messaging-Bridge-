@@ -1,6 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { logger } from 'hono/logger'
-import { apiReference } from '@scalar/hono-api-reference'
+import { Scalar } from '@scalar/hono-api-reference'
 import { apiKeyAuth } from './common/middleware/auth'
 import { errorHandler } from './common/middleware/error-handler'
 import { telegramRouter } from './modules/telegram/telegram.controller'
@@ -16,6 +16,13 @@ app.use('*', logger())
 app.get('/', (c) => c.json({ status: 'ok', service: 'Hono Messaging Bridge' }))
 
 // ─── OpenAPI Setup ───────────────────────────────────────────────────────────
+app.openAPIRegistry.registerComponent('securitySchemes', 'ApiKeyAuth', {
+  type: 'apiKey',
+  in: 'header',
+  name: 'X-API-Key',
+  description: 'Masukkan API Key Anda untuk mengakses endpoint yang dilindungi',
+})
+
 app.doc('/doc', {
   openapi: '3.0.0',
   info: {
@@ -23,16 +30,19 @@ app.doc('/doc', {
     title: 'Hono Messaging Bridge',
     description: 'API for bridging messages across multiple platforms (WhatsApp, Telegram, Email)',
   },
+  security: [
+    {
+      ApiKeyAuth: [],
+    },
+  ],
 })
 
 // ─── API Reference UI (no auth) ─────────────────────────────────────────────
 app.get(
   '/reference',
-  apiReference({
+  Scalar({
     theme: 'purple',
-    spec: {
-      url: '/doc',
-    },
+    url: '/doc',
   })
 )
 

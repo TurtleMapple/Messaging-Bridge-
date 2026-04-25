@@ -7,7 +7,7 @@ import { ValidationError } from '../../common/utils/errors';
 
 const whatsappRouter = new OpenAPIHono({
   defaultHook: (result, c) => {
-    if (!result.success) {
+    if (!result.success && 'error' in result) {
       console.warn('[WhatsApp] Validation failed');
       const data = result.error.issues.map((i) => ({
         field: i.path.join('.'),
@@ -64,7 +64,11 @@ whatsappRouter.openapi(statusRoute, (c) => {
   }
 
   console.log(`[WhatsApp] Status Check: ${status.state}`);
-  return c.json(successResponse(status, message) as any, 200);
+  return c.json({
+    status: 'success',
+    message,
+    data: status
+  } as const, 200);
 });
 
 /**
@@ -112,7 +116,11 @@ whatsappRouter.openapi(sendRoute, async (c) => {
   console.log(`[WhatsApp] Sending message to ${dto.recipient}`);
   
   const result = await whatsappService.sendMessage(dto);
-  return c.json(successResponse(result, 'Pesan berhasil dikirim ke WhatsApp') as any, 200);
+  return c.json({
+    status: 'success',
+    message: 'Pesan berhasil dikirim ke WhatsApp',
+    data: result
+  } as const, 200);
 });
 
 /**
@@ -156,7 +164,11 @@ whatsappRouter.openapi(reconnectRoute, async (c) => {
   const status = whatsappService.getStatus();
   
   if (status.state === 'READY') {
-    return c.json({ status: 'fail', message: 'WhatsApp sudah terhubung', code: 'ALREADY_CONNECTED' } as const, 400);
+    return c.json({
+      status: 'fail',
+      message: 'WhatsApp sudah terhubung',
+      code: 'ALREADY_CONNECTED'
+    } as const, 400);
   }
 
   console.log('[WhatsApp] Manual reconnection triggered');
@@ -165,7 +177,11 @@ whatsappRouter.openapi(reconnectRoute, async (c) => {
     console.error('[WhatsApp] Reconnection error:', err);
   });
 
-  return c.json({ status: 'success', message: 'Proses inisialisasi ulang telah dimulai', data: null } as const, 200);
+  return c.json({
+    status: 'success',
+    message: 'Proses inisialisasi ulang telah dimulai',
+    data: null
+  } as const, 200);
 });
 
 export { whatsappRouter };

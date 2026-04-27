@@ -41,7 +41,7 @@ const statusRoute = createRoute({
       },
       description: 'Status WhatsApp diambil'
     }
-  }
+  } 
 });
 
 whatsappRouter.openapi(statusRoute, (c) => {

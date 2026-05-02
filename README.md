@@ -1,137 +1,131 @@
-# Hono Messaging Bridge
+# 🌉 Hono Messaging Bridge
 
-Hono Messaging Bridge is an API service built with [Hono](https://hono.dev/) and [Bun](https://bun.sh/) that acts as a unified platform to send messages across multiple channels, including WhatsApp, Telegram, and Email.
+Hono Messaging Bridge is a high-performance, unified API service designed to act as a central hub for dispatching messages across multiple channels. Built on top of **[Bun](https://bun.sh/)** and **[Hono](https://hono.dev/)**, this service provides a single, secure REST API to send messages via WhatsApp, Telegram, and Email.
 
-## Features
+By abstracting the complexities of individual platform SDKs, it allows developers to easily integrate omni-channel messaging capabilities into their applications with zero friction, backed by robust validation, native OpenAPI documentation, and strict TypeScript safety.
 
-- **🚀 High Performance**: Powered by Bun and Hono.
-- **📱 WhatsApp Integration**: Native WhatsApp connection using [`@whiskeysockets/baileys`](https://github.com/WhiskeySockets/Baileys).
-- **🤖 Telegram Integration**: Bot integration using [`grammy`](https://grammy.dev/).
-- **📧 Email Integration**: Sends emails via [Resend](https://resend.com/).
-- **🛡️ Type-Safe API & Validation**: Powered by `Zod` and `@hono/zod-openapi`.
-- **📖 Auto-generated Documentation**: Interactive API reference via Scalar at `/reference`.
-- **🔐 Secure**: API Key authentication protecting all messaging endpoints.
+---
 
-## Project Structure
+## 🛠️ Tech Stack
 
-```text
-├── 📁 docs
-│   ├── 📝 coding-standard.md
-│   ├── 📝 commit-standard.md
-│   └── 📝 unit-testing-standard.md
-├── 📁 src
-│   ├── 📁 common
-│   │   ├── 📁 config
-│   │   │   └── 📄 env.ts
-│   │   ├── 📁 middleware
-│   │   │   ├── 📄 auth.ts
-│   │   │   └── 📄 error-handler.ts
-│   │   └── 📁 utils
-│   │       ├── 📄 errors.ts
-│   │       └── 📄 response.ts
-│   ├── 📁 modules
-│   │   ├── 📁 email
-│   │   │   ├── 📁 interfaces
-│   │   │   │   └── 📄 email-provider.interface.ts
-│   │   │   ├── 📁 providers
-│   │   │   │   ├── 📄 mock-email.provider.ts
-│   │   │   │   └── 📄 resend.provider.ts
-│   │   │   ├── 📁 tests
-│   │   │   │   ├── 📄 email.controller.test.ts
-│   │   │   │   ├── 📄 email.schema.test.ts
-│   │   │   │   ├── 📄 email.service.test.ts
-│   │   │   │   └── 📄 resend.provider.test.ts
-│   │   │   ├── 📄 email.controller.ts
-│   │   │   ├── 📄 email.schema.ts
-│   │   │   └── 📄 email.service.ts
-│   │   ├── 📁 telegram
-│   │   │   ├── 📁 tests
-│   │   │   │   ├── 📄 telegram.controller.test.ts
-│   │   │   │   ├── 📄 telegram.schema.test.ts
-│   │   │   │   └── 📄 telegram.service.test.ts
-│   │   │   ├── 📄 telegram.controller.ts
-│   │   │   ├── 📄 telegram.schema.ts
-│   │   │   └── 📄 telegram.service.ts
-│   │   └── 📁 whatsapp
-│   │       ├── 📁 tests
-│   │       │   ├── 📄 whatsapp.connection.test.ts
-│   │       │   ├── 📄 whatsapp.controller.test.ts
-│   │       │   ├── 📄 whatsapp.schema.test.ts
-│   │       │   └── 📄 whatsapp.service.test.ts
-│   │       ├── 📄 whatsapp.connection.ts
-│   │       ├── 📄 whatsapp.controller.ts
-│   │       ├── 📄 whatsapp.schema.ts
-│   │       └── 📄 whatsapp.service.ts
-│   ├── 📄 index.ts
-│   └── 📄 server.ts
-├── ⚙️ .env.example
-├── ⚙️ .gitignore
-├── 📄 LICENSE
-├── 📝 README.md
-├── ⚙️ package.json
-├── ⚙️ pnpm-lock.yaml
-├── ⚙️ pnpm-workspace.yaml
-└── ⚙️ tsconfig.json
-```
+This project is built using modern web technologies to ensure maximum performance and developer experience:
 
-## Prerequisites
+- **Runtime**: [Bun](https://bun.sh/) - A fast all-in-one JavaScript runtime.
+- **Framework**: [Hono](https://hono.dev/) - Ultrafast web framework for the Edges.
+- **Validation & Schema**: [Zod](https://zod.dev/) - TypeScript-first schema validation.
+- **API Documentation**: 
+  - [`@hono/zod-openapi`](https://github.com/honojs/middleware/tree/main/packages/zod-openapi) - Zod to OpenAPI schema generation.
+  - [Scalar](https://scalar.com/) - Beautiful API Reference UI.
+- **Providers / SDKs**:
+  - **WhatsApp**: [`@whiskeysockets/baileys`](https://github.com/WhiskeySockets/Baileys) (Native WebSocket connection)
+  - **Telegram**: [`grammy`](https://grammy.dev/) (Telegram Bot API framework)
+  - **Email**: [Resend](https://resend.com/) & `nodemailer` (Modern email delivery)
 
-- [Bun](https://bun.sh/) installed on your machine.
+---
 
-## Getting Started
+## 🔄 System Flow & Architecture
 
-### 1. Install Dependencies
+The system is designed with a modular, SOLID-compliant architecture. Here is the general flow of a message request:
+
+1. **Client Request**: The client sends an HTTP POST request to the desired channel endpoint (e.g., `/whatsapp/send`, `/email/send`) containing the necessary payload and an `X-API-Key` header.
+2. **Authentication Middleware**: The global `apiKeyAuth` middleware intercepts the request. It verifies the API key against the server's environment variable. If invalid, it returns a `401 Unauthorized`.
+3. **Validation Layer**: The request reaches the specific module's router. `zod-openapi` strictly validates the incoming JSON body against the defined Zod schemas. If validation fails, a structured `400 Bad Request` error is returned automatically.
+4. **Controller & Service Layer**: 
+   - The **Controller** receives the validated data and delegates the business logic to the corresponding **Service**.
+   - The **Service** interacts with the underlying provider SDKs (Baileys for WhatsApp, Grammy for Telegram, Resend for Email).
+5. **Execution & Response**: 
+   - The provider executes the action (sending the message).
+   - The Service returns the result back to the Controller.
+   - The Controller sends a standardized `JSend` JSON response (`success`, `fail`, `error`) back to the client.
+6. **Error Handling**: Any errors thrown during this process are caught by the global `errorHandler` middleware, which formats them into a consistent HTTP response.
+
+---
+
+## 🚀 Getting Started
+
+Follow these steps to set up and run the Hono Messaging Bridge on your local machine.
+
+### 1. Prerequisites
+
+- **[Bun](https://bun.sh/)** installed on your machine (`curl -fsSL https://bun.sh/install | bash`).
+- A WhatsApp account (for WhatsApp integration).
+- A Telegram Bot Token (from [@BotFather](https://t.me/botfather)).
+- A Resend API Key (from [resend.com](https://resend.com)).
+
+### 2. Installation
+
+Clone the repository and install the dependencies using Bun:
 
 ```sh
+# Clone the repository
+git clone https://github.com/TurtleMapple/Messaging-Bridge.git
+cd Messaging-Bridge
+
+# Install dependencies
 bun install
 ```
 
-### 2. Environment Variables
+### 3. Environment Configuration
 
-Create a `.env` file in the root directory and populate it with the following required variables:
+Create a `.env` file in the root directory and populate it with your credentials:
 
 ```env
 # Application
 NODE_ENV=development
 PORT=3000
 
-# Auth
+# Security
 API_KEY=your_secure_api_key_here
 
-# Telegram
+# Telegram Provider
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 
-# Email (Resend)
+# Email Provider (Resend)
 RESEND_API_KEY=your_resend_api_key
 EMAIL_FROM=your_verified_email@example.com
 ```
 
-### 3. Run the Application
+### 4. Running the Application
 
-Start the development server:
+Start the development server with hot-reloading:
 
 ```sh
 bun run dev
 ```
 
-### 4. WhatsApp Authentication
+**WhatsApp Authentication Flow:**
+Upon the first run, the system will initialize the WhatsApp (Baileys) connection. It will generate a QR code in your terminal. Open your WhatsApp mobile app, go to **Linked Devices**, and scan the QR code to authenticate the session. The session state will be saved locally.
 
-Upon running the server, if you haven't linked a WhatsApp account yet, a QR code will be generated in the terminal. Scan this QR code with your WhatsApp mobile app to authenticate the session.
+### 5. Explore the API
 
-## API Documentation
+Once the server is running, you can explore the interactive API documentation to test the endpoints directly from your browser:
 
-Once the server is running, you can explore the interactive API documentation and test endpoints directly from your browser:
+- **API Reference (Scalar)**: [http://localhost:3000/reference](http://localhost:3000/reference)
+- **OpenAPI Schema (JSON)**: [http://localhost:3000/doc](http://localhost:3000/doc)
 
-- **API Reference**: [http://localhost:3000/reference](http://localhost:3000/reference)
-- **OpenAPI Schema**: [http://localhost:3000/doc](http://localhost:3000/doc)
+*Note: To test the endpoints via the UI, use the "Authorize" button to inject your `API_KEY` into the `X-API-Key` header.*
 
-To use the protected endpoints, remember to provide the `X-API-Key` header with the value of your `API_KEY`.
+---
 
-## Built With
+## 📁 Project Structure
 
-- [Hono](https://hono.dev/)
-- [Bun](https://bun.sh/)
-- [Baileys](https://github.com/WhiskeySockets/Baileys)
-- [Grammy](https://grammy.dev/)
-- [Resend](https://resend.com/)
-- [Zod](https://zod.dev/)
+The project follows a clean, module-based architecture:
+
+```text
+├── 📁 docs/              # Project standards and documentation
+├── 📁 src/
+│   ├── 📁 common/        # Shared resources (config, middleware, utils, errors)
+│   ├── 📁 modules/       # Feature modules
+│   │   ├── 📁 email/     # Email provider logic (Resend, Nodemailer)
+│   │   ├── 📁 telegram/  # Telegram Bot logic (Grammy)
+│   │   └── 📁 whatsapp/  # WhatsApp logic (Baileys, Connection State)
+│   ├── 📄 index.ts       # Hono App initialization & Routing
+│   └── 📄 server.ts      # Bun Server entry point & Bootstrap
+└── ⚙️ .env.example       # Example environment variables
+```
+
+---
+
+## 📄 License
+
+This project is open-source and available under the [MIT License](LICENSE).
